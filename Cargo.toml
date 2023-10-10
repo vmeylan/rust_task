@@ -6,8 +6,23 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-tokio = { version = "1", features = ["full"] }
-reqwest = "0.11"
-serde = "1.0"
-serde_json = "1.0"
+reqwest = { version = "0.11", features = ["json", "blocking"] }
+serde = { version = "1.0", features = ["derive"] }
 serde_derive = "1.0"
+dotenv = "0.15"
+lazy_static = "1.4"
+# alloy-core = "0.0.10"              # Structs used to build a runtime for alloy.
+alloy-json-abi = "0.4.2"           # Full Ethereum JSON-ABI implementation
+tokio-tungstenite = { version = "0.20.1", features = [] }
+futures-util = "0.3.28"
+
+ethers = { version = "2.0.10", features = ["ws", "rustls"] }
+eyre = "0.6.8"
+hex = "0.4.3"
+tokio = { version = "1.28.2", features = ["full"] }
+serde_json = "1.0.96"
+alloy-primitives = "0.4.2"    # Ethereum primitive types
+
+tiny-keccak = "2.0.2"
+hex-literal = "0.4.1"            # Macro for converting hexadecimal string to a byte array at compile time
+
