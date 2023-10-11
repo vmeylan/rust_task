@@ -123,3 +123,71 @@ async fn main() {
     }
 }
 
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ethers::providers::{Middleware, ProviderError};
+    use dotenv::dotenv;
+    use ethers::types::H160;
+    use std::str::FromStr;
+    use tokio::time::{timeout, Duration};
+
+    #[tokio::test]
+    async fn test_websocket_connection() -> Result<(), Box<dyn std::error::Error>> {
+        // Replace with your Infura API key
+        dotenv().ok();
+        let api_key: String = std::env::var("INFURA_API_KEY").expect("INFURA_API_KEY not set");
+
+        // Construct the WebSocket URL
+        let url = format!("wss://mainnet.infura.io/ws/v3/{}", api_key);
+
+        // Connect to the WebSocket provider
+        let provider = Provider::<Ws>::connect(url.clone())
+            .await
+            .expect("Failed to connect to WebSocket provider");
+
+        // Specify the filter
+        // Parse the address
+        let address_str = "0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640";
+        let address = H160::from_str(address_str)?;
+
+        // Specify the filter with block range
+        let filter = Filter {
+            address: Some(ValueOrArray::Value(address)),
+            ..Default::default()
+        };
+
+        // Get the logs specifically for the given address
+        let mut logs_stream = provider.watch(&filter).await?;
+
+        let mut log_received = false;  // Boolean flag to track if any log was received
+
+        let timeout_duration = Duration::from_secs(30);
+
+        let result = timeout(timeout_duration, async {
+            while let Some(_log) = logs_stream.next().await {
+                log_received = true;  // Set the flag to true once a log is received
+                break;  // Exit the loop after receiving and processing one log
+            }
+
+            Ok::<(), ProviderError>(())
+        }).await;
+
+        match result {
+            Ok(_) => {
+                // If we reach this point and haven't received a log, raise an error
+                if !log_received {
+                    return Err("No logs were received".into());
+                }
+            },
+            Err(_) => {
+                // This will be triggered if the timeout expires
+                return Err("Timed out after 30 seconds without receiving a log".into());
+            }
+        }
+
+        Ok(())
+    }
+}
+
