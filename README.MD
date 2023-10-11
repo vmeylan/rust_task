@@ -9,8 +9,7 @@ This is a Rust-based Ethereum log processor that connects to the Ethereum networ
 - Setup
 - Usage
 - Testing
-- Contributing
-- License
+
 
 ## Overview
 
