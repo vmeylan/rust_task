@@ -97,16 +97,29 @@ async fn fetch_eth_logs(address: &str, abi: &Abi) -> Result<(), Box<dyn std::err
 
 #[tokio::main]
 async fn main() {
-    // test_sig_match::test_hash();
-    // address is USDC_WETH V3 contract https://etherscan.io/address/0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640
-    let address = "0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640";
+    // Get the root directory
+    let root_directory = match utils::root_dir() {
+        Some(dir) => dir,
+        None => {
+            eprintln!("Error: Root directory not found");
+            return;
+        }
+    };
 
-    let wrapped_json = std::fs::read_to_string("src/abi.json").unwrap();
-    let abi: ethers::abi::Abi = serde_json::from_str(&wrapped_json).unwrap();
+    // Construct the full path to abi.json using the root directory
+    let abi_path = format!("{}/src/abi.json", root_directory);
 
-    // Fetch logs using the ABI
-    if let Err(err) = fetch_eth_logs(address, &abi).await {
-        eprintln!("Error: {}", err);
+    // Check if the file exists
+    if let Ok(abi_json) = std::fs::read_to_string(abi_path) {
+        let abi: ethers::abi::Abi = serde_json::from_str(&abi_json).unwrap();
+
+        // Continue with fetching Ethereum logs using the ABI
+        let address = "0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640";
+        if let Err(err) = fetch_eth_logs(address, &abi).await {
+            eprintln!("Error: {}", err);
+        }
+    } else {
+        eprintln!("Error: Failed to read ABI JSON file");
     }
 }
 

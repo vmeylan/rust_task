@@ -4,6 +4,7 @@ use std::path::Path;
 use serde_json;
 use chrono::{Utc, NaiveDateTime, Datelike};
 use serde::{Serialize, Deserialize};
+use crate::utils;
 
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -20,10 +21,23 @@ pub struct DecodedData {
 
 
 pub fn store_decoded_data(address: &str, data: &DecodedData) -> Result<(), io::Error> {
-    // Create the src/data directory if it doesn't exist
-    let dir = Path::new("data/");
-    if !dir.exists() {
-        std::fs::create_dir_all(&dir)?;
+    let root_directory = match utils::root_dir() {
+        Some(dir) => dir,
+        None => {
+            eprintln!("Error: Root directory not found");
+            return Err(io::Error::new(io::ErrorKind::Other, "Root directory not found"));
+        }
+    };
+
+    // Construct the full path to the data directory using the root directory
+    let data_dir = format!("{}/data", root_directory);
+
+    // Check if the directory exists, and create it if it doesn't
+    if !std::path::Path::new(&data_dir).exists() {
+        if let Err(err) = std::fs::create_dir_all(&data_dir) {
+            eprintln!("Error: Failed to create data directory: {}", err);
+            return Err(err);
+        }
     }
 
     // Get the current date and format it as yyyy_mm_dd
@@ -31,7 +45,7 @@ pub fn store_decoded_data(address: &str, data: &DecodedData) -> Result<(), io::E
     let formatted_date = format!("{}_{}_{}", now.year(), now.month(), now.day());
 
     // Create the filename using the address and date
-    let filename = format!("{}/{}_{}_decoded_swaps.json", dir.display(), address, formatted_date);
+    let filename = format!("{}/{}_{}_decoded_swaps.json", data_dir, address, formatted_date);
 
     // Serialize the data to JSON
     let json = serde_json::to_string(&data)?;

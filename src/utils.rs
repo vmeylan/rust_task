@@ -2,6 +2,26 @@ use ethers::{
     core::types::Log,
 };
 use crate::log_processing::to_hex;
+use std::env;
+use std::path::{Path, PathBuf};
+
+pub fn root_dir() -> Option<String> {
+    // Get the current directory
+    let current_dir = env::current_dir().ok()?;
+
+    // Define the path to the root directory
+    let mut root_dir = PathBuf::from(current_dir);
+
+    // Iterate upwards from the current directory to find the root directory
+    while !root_dir.join(".git").exists() {
+        // If we reach the filesystem root without finding .git, return None
+        if !root_dir.pop() {
+            return None;
+        }
+    }
+
+    Some(root_dir.to_string_lossy().into_owned())
+}
 
 pub fn pretty_print_log(log: &Log)  {
     println!("Address: {}", to_hex(&log.address.0)); // Assuming Address is H160 type
