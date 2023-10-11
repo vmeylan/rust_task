@@ -1,5 +1,6 @@
 mod etherscan;
 mod test_sig_match;
+mod data_store;
 
 use ethers::{
     core::types::{Filter, Log, H160, U256},
@@ -18,53 +19,15 @@ use std::path::Path;
 use chrono::{Utc, NaiveDate, Datelike};
 use std::io::Write;
 
+use crate::data_store::DecodedData;
+use crate::data_store::store_decoded_data;
 
 // resources:
+// https://doc.rust-lang.org/book/
 // https://www.gakonst.com/ethers-rs/subscriptions/logs.html?highlight=abi#subscribing-to-logs
 // https://docs.infura.io/networks/ethereum/json-rpc-methods/eth_getlogs
-// https://www.gakonst.com/ethers-rs/subscriptions/multiple-subscriptions.html helpful for the long run
+// https://www.gakonst.com/ethers-rs/subscriptions/multiple-subscriptions.html
 
-#[derive(Debug, Serialize, Deserialize)]
-struct DecodedData {
-    transaction_hash: String,
-    sender: String,
-    recipient: String,
-    amount0: i128,
-    amount1: i128,
-    sqrtPriceX96: u128,
-    liquidity: u128,
-    tick: i32,
-}
-
-
-fn store_decoded_data(address: &str, data: &DecodedData) -> Result<(), io::Error> {
-    // Create the src/data directory if it doesn't exist
-    let dir = Path::new("src/data");
-    if !dir.exists() {
-        std::fs::create_dir_all(&dir)?;
-    }
-
-    // Get the current date and format it as yyyy_mm_dd
-    let now = Utc::now().naive_utc();
-    let formatted_date = format!("{}_{}_{}", now.year(), now.month(), now.day());
-
-    // Create the filename using the address and date
-    let filename = format!("{}/{}_{}_decoded_swaps.json", dir.display(), address, formatted_date);
-
-    // Serialize the data to JSON
-    let json = serde_json::to_string(&data)?;
-
-    // Check if the file exists. If it does, append a newline before the new JSON entry.
-    // If not, just write the JSON entry to the new file.
-    if Path::new(&filename).exists() {
-        let mut file = std::fs::OpenOptions::new().append(true).open(filename)?;
-        writeln!(file, "\n{}", json)?;
-    } else {
-        std::fs::write(&filename, json)?;
-    }
-
-    Ok(())
-}
 
 // Convert a slice of u8 into a hexadecimal string representation.
 fn to_hex(slice: &[u8]) -> String {
@@ -208,7 +171,6 @@ async fn process_log(log: Log, abi: &Abi) -> Result<Option<DecodedData>, Box<dyn
     }
     Ok(None)
 }
-
 
 
 /// fetch_eth_logs Fetches Ethereum logs for a given contract address and processes each log.
