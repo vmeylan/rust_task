@@ -5,12 +5,13 @@ use ethers::{
     core::types::{Filter, Log, H160, U256},
     providers::{Provider, Ws},
     prelude::*,
-    abi::{Abi, RawLog, EventExt, Detokenize, Token},
+    abi::{Abi, RawLog, EventExt, Detokenize, Token, ethabi},
     utils::keccak256,
 };
+use ethers::types::Log as EthersLog;
 use eyre::Result;
 use dotenv::dotenv;
-use serde::Deserialize;
+use serde::{Serialize, Deserialize};
 use std::collections::HashMap;
 
 // resources:
@@ -18,36 +19,80 @@ use std::collections::HashMap;
 // https://docs.infura.io/networks/ethereum/json-rpc-methods/eth_getlogs
 // https://www.gakonst.com/ethers-rs/subscriptions/multiple-subscriptions.html helpful for the long run
 
+#[derive(Debug, Serialize, Deserialize)]
+struct DecodedData {
+    transaction_hash: String,
+    sender: String,
+    recipient: String,
+    amount0: i128,
+    amount1: i128,
+    sqrtPriceX96: u128,
+    liquidity: u128,
+    tick: i32,
+}
 
-fn print_decoded_params(decoded: &ethers::abi::Log, variable_names: &[&str]) {
+
+
+fn parse_decoded_log(decoded: ethabi::Log, log: &EthersLog) -> Option<DecodedData> {
+    let sender = log.topics[1].to_string();
+    let recipient = log.topics[2].to_string();
+    let transaction_hash = log.transaction_hash.unwrap().to_string();
+
+    let mut amount0: i128 = 0;
+    let mut amount1: i128 = 0;
+    let mut sqrtPriceX96: u128 = 0;
+    let mut liquidity: u128 = 0;
+    let mut tick: i32 = 0;
+
     for param in &decoded.params {
-        if variable_names.contains(&param.name.as_str()) {
-            match param.name.as_str() {
-                "amount0" | "amount1" => {
-                    if let Token::Int(value) = &param.value {
-                        if *value > U256::from(i128::MAX as u128) {
-                            let neg_value = U256::max_value() - *value + U256::one();
-                            println!("{}: -{}", param.name, neg_value);
-                        } else {
-                            println!("{}: {}", param.name, value.low_u128() as i128);
-                        }
+        match param.name.as_str() {
+            "amount0" | "amount1" => {
+                if let Token::Int(value) = &param.value {
+                    let converted_value = if *value > U256::from(i128::MAX as u128) {
+                        let neg_value = (U256::max_value() - *value + U256::one()).low_u128();
+                        -(neg_value as i128)
+                    } else {
+                        value.low_u128() as i128
+                    };
+
+                    if param.name.as_str() == "amount0" {
+                        amount0 = converted_value;
+                    } else {
+                        amount1 = converted_value;
                     }
-                },
-                "sqrtPriceX96" | "liquidity" => {
-                    if let Token::Uint(value) = &param.value {
-                        println!("{}: {}", param.name, value.low_u128());
-                    }
-                },
-                "tick" => {
-                    if let Token::Int(value) = &param.value {
-                        println!("{}: {}", param.name, value.low_u64() as i32);
-                    }
-                },
-                _ => println!("Unknown parameter: {}", param.name)
+                }
             }
+            "sqrtPriceX96" => {
+                if let Token::Uint(value) = &param.value {
+                    sqrtPriceX96 = value.low_u128();
+                }
+            }
+            "liquidity" => {
+                if let Token::Uint(value) = &param.value {
+                    liquidity = value.low_u128();
+                }
+            }
+            "tick" => {
+                if let Token::Int(value) = &param.value {
+                    tick = value.low_u64() as i32;
+                }
+            }
+            _ => {}
         }
     }
+
+    Some(DecodedData {
+        transaction_hash,
+        sender,
+        recipient,
+        amount0,
+        amount1,
+        sqrtPriceX96,
+        liquidity,
+        tick,
+    })
 }
+
 
 
 /// process_log Processes a given Ethereum log entry using the provided ABI.
@@ -63,7 +108,7 @@ fn print_decoded_params(decoded: &ethers::abi::Log, variable_names: &[&str]) {
 /// # Returns
 ///
 /// A Result indicating the success or failure of the processing.
-async fn process_log(log: Log, abi: &Abi) -> Result<(), Box<dyn std::error::Error>> {
+async fn process_log(log: Log, abi: &Abi) -> Result<Option<DecodedData>, Box<dyn std::error::Error>> {
     let raw_log = RawLog {
         topics: log.topics.clone(),
         data: (*log.data.clone()).to_vec(),
@@ -107,27 +152,18 @@ async fn process_log(log: Log, abi: &Abi) -> Result<(), Box<dyn std::error::Erro
             // non-standard encoding, or other discrepancies between the log and the ABI definition.
             let result = event.parse_log(raw_log.clone()).map_err(|e| eyre::eyre!("Failed to decode event: {:?}", e));
 
+            let mut decoded_data = None;
+
             if let Ok(decoded) = result {
-                println!("\nSuccessfully decoded event: {event_name}");
-
-                // TODO write to CSV
-                // TODO unit tests
-                let variable_names = ["amount0", "amount1", "sqrtPriceX96", "liquidity", "tick"];
-                print_decoded_params(&decoded, &variable_names);
-
-                successfully_decoded = true;
-                println!("{}", '\n');
-                break;  // We break here since we successfully decoded the event
-            } else {
-                println!("Failed to decode event with signature: {}", event.signature());
+                decoded_data = parse_decoded_log(decoded, &log);
+                if let Some(ref data) = decoded_data {
+                    println!("{:?}", data);
+                }
             }
-        }
-
-        if !successfully_decoded {
-            // println!("Failed to decode any event for this log.");
+            return Ok(decoded_data);
         }
     }
-    Ok(())
+    Ok(None)
 }
 
 
@@ -175,6 +211,7 @@ async fn fetch_eth_logs(address: &str, abi: &Abi) -> Result<(), Box<dyn std::err
 #[tokio::main]
 async fn main() {
     // test_sig_match::test_hash();
+    // address is USDC_WETH V3 contract https://etherscan.io/address/0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640
     let address = "0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640";
 
     let wrapped_json = std::fs::read_to_string("src/abi.json").unwrap();
