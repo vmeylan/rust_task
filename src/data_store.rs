@@ -21,7 +21,7 @@ pub struct DecodedData {
 
 pub fn store_decoded_data(address: &str, data: &DecodedData) -> Result<(), io::Error> {
     // Create the src/data directory if it doesn't exist
-    let dir = Path::new("src/data");
+    let dir = Path::new("data/");
     if !dir.exists() {
         std::fs::create_dir_all(&dir)?;
     }
