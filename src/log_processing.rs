@@ -14,6 +14,8 @@ use std::io;
 use std::path::Path;
 use chrono::{Utc, NaiveDate, Datelike};
 use std::io::Write;
+use hex::FromHex;
+
 
 use crate::data_store::DecodedData;
 use crate::data_store::store_decoded_data;
@@ -140,4 +142,65 @@ pub async fn process_log(log: Log, event_map: &HashMap<[u8; 32], (String, Event)
         }
     }
     Ok(None)
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ethers::core::types::{Log as EthersLog, H256};
+    use ethers::abi::{ethabi, Token};
+    use std::str::FromStr;
+
+    #[test]
+    fn test_process_log() {
+        // 1. Set up a log to be processed. From log printed with pretty_print_log trait
+        let log = Log {
+            address: H160::from_str("0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640").unwrap(),
+            topics: vec![
+                H256::from_str("0xc42079f94a6350d7e6235f29174924f928cc2ac818eb64fed8004e115fbcca67").unwrap(),
+                H256::from_str("0x000000000000000000000000d7f3fbe8c72a961a5515203eada59750437fa762").unwrap(),
+                H256::from_str("0x0000000000000000000000001c09a10047fcc944efde9226e259eddfde2c1cf0").unwrap()
+            ],
+            data: Bytes::from_hex("0x0000000000000000000000000000000000000000000000000000000d92cae287fffffffffffffffffffffffffffffffffffffffffffffffdfe6d04e32064349f0000000000000000000000000000000000006270c87ad64fc69a7baa1492b4f20000000000000000000000000000000000000000000000017c7599806e23275900000000000000000000000000000000000000000000000000000000000317ce").unwrap(),
+            block_hash: Some(H256::from_str("0x1a65b8bb49fe739ae92ed688ab765cafe4dbcdd2b6c442e48a682ce2c0e451ee").unwrap()),
+            block_number: Some(U64::from(18326572)),
+            transaction_hash: Some(H256::from_str("0x13f84c56285e67f705bca6cb865610deda492752c0face651e0b3cb7893500f3").unwrap()),
+            transaction_index: Some(U64::from(7)),
+            log_index: Some(U256::from(49)),
+            transaction_log_index: None,
+            log_type: None,
+            removed: Some(false),
+        };
+
+        // 2. Set up the event map
+        let wrapped_json = std::fs::read_to_string("src/abi.json").unwrap();
+        let abi: ethers::abi::Abi = serde_json::from_str(&wrapped_json).unwrap();
+        let mut event_map = HashMap::new();
+        for (event_name, events) in &abi.events {
+            for event in events {
+                let event_signature_hash = keccak256(event.abi_signature().as_bytes());
+                event_map.insert(event_signature_hash, (event_name.clone(), event.clone()));
+            }
+        }
+
+        // 3. Call the process_log function
+        let result = tokio_test::block_on(process_log(log, &event_map));
+
+        // 4. Check the result
+        assert!(result.is_ok());
+        let decoded_data = result.unwrap();
+        assert!(decoded_data.is_some());
+
+        let data = decoded_data.unwrap();
+        // https://etherscan.io/tx/0x13f84c56285e67f705bca6cb865610deda492752c0face651e0b3cb7893500f3#eventlog
+        assert_eq!(data.transaction_hash, "0x13f84c56285e67f705bca6cb865610deda492752c0face651e0b3cb7893500f3");
+        assert_eq!(data.sender, "0xd7f3fbe8c72a961a5515203eada59750437fa762");
+        assert_eq!(data.recipient, "0x1c09a10047fcc944efde9226e259eddfde2c1cf0");
+        assert_eq!(data.amount0, 58297344647);
+        assert_eq!(data.amount1, -37006917189485972321);
+        assert_eq!(data.sqrtPriceX96, 1996611740862433600358475292128498);
+        assert_eq!(data.liquidity, 27414987083570423641);
+        assert_eq!(data.tick, 202702);
+    }
 }

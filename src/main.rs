@@ -16,8 +16,10 @@ mod etherscan;
 mod test_sig_match;
 mod data_store;
 mod log_processing;
+mod utils;
 use crate::data_store::store_decoded_data;
 use crate::log_processing::process_log;
+use crate::utils::pretty_print_log;
 
 
 // resources:
@@ -65,6 +67,7 @@ async fn fetch_eth_logs(address: &str, abi: &Abi) -> Result<(), Box<dyn std::err
 
     loop { // Changed to an infinite loop
         if let Some(log) = logs_stream.next().await {
+            // println!("Mock Log:\n{:?}", pretty_print_log(&log));  // used for unit test creation
             if !map_created {
                 // /!\ We use event.abi_signature() instead of event.signature() here.
                 // The reason is that `event.signature()` provides a human-readable format,

@@ -26,4 +26,5 @@ alloy-primitives = "0.4.2"    # Ethereum primitive types
 tiny-keccak = "2.0.2"
 hex-literal = "0.4.1"            # Macro for converting hexadecimal string to a byte array at compile time
 chrono = "0.4.31"                   # Date and time library for Rust
+tokio-test = "0.4.3"                # Testing utilities for Tokio- and futures-based code
 
