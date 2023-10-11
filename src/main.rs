@@ -13,6 +13,11 @@ use eyre::Result;
 use dotenv::dotenv;
 use serde::{Serialize, Deserialize};
 use std::collections::HashMap;
+use std::io;
+use std::path::Path;
+use chrono::{Utc, NaiveDate, Datelike};
+use std::io::Write;
+
 
 // resources:
 // https://www.gakonst.com/ethers-rs/subscriptions/logs.html?highlight=abi#subscribing-to-logs
@@ -32,11 +37,49 @@ struct DecodedData {
 }
 
 
+fn store_decoded_data(address: &str, data: &DecodedData) -> Result<(), io::Error> {
+    // Create the src/data directory if it doesn't exist
+    let dir = Path::new("src/data");
+    if !dir.exists() {
+        std::fs::create_dir_all(&dir)?;
+    }
+
+    // Get the current date and format it as yyyy_mm_dd
+    let now = Utc::now().naive_utc();
+    let formatted_date = format!("{}_{}_{}", now.year(), now.month(), now.day());
+
+    // Create the filename using the address and date
+    let filename = format!("{}/{}_{}_decoded_swaps.json", dir.display(), address, formatted_date);
+
+    // Serialize the data to JSON
+    let json = serde_json::to_string(&data)?;
+
+    // Check if the file exists. If it does, append a newline before the new JSON entry.
+    // If not, just write the JSON entry to the new file.
+    if Path::new(&filename).exists() {
+        let mut file = std::fs::OpenOptions::new().append(true).open(filename)?;
+        writeln!(file, "\n{}", json)?;
+    } else {
+        std::fs::write(&filename, json)?;
+    }
+
+    Ok(())
+}
+
+// Convert a slice of u8 into a hexadecimal string representation.
+fn to_hex(slice: &[u8]) -> String {
+    format!("0x{}", hex::encode(slice))
+}
 
 fn parse_decoded_log(decoded: ethabi::Log, log: &EthersLog) -> Option<DecodedData> {
-    let sender = log.topics[1].to_string();
-    let recipient = log.topics[2].to_string();
-    let transaction_hash = log.transaction_hash.unwrap().to_string();
+    // Extract the last 20 bytes of the topic, representing the Ethereum address,
+    // because Ethereum addresses are 20 bytes long and topics are zero-padded.
+    // Convert topics to Ethereum addresses.
+    let sender = to_hex(&log.topics[1][12..]);
+    let recipient = to_hex(&log.topics[2][12..]);
+
+    // Convert transaction hash to its full hexadecimal string representation.
+    let transaction_hash = to_hex(&log.transaction_hash.unwrap().0);
 
     let mut amount0: i128 = 0;
     let mut amount1: i128 = 0;
@@ -142,7 +185,7 @@ async fn process_log(log: Log, abi: &Abi) -> Result<Option<DecodedData>, Box<dyn
     for (hash, (event_name, event)) in &event_map {
         // check if the event_name is equal to Swap
         if event_name != "Swap" {
-            println!("Skipping event: {}", event_name);
+            // println!("Skipping event: {}", event_name);
             continue;
         }
         // Check if the first topic of the log (which is the event signature) matches the current hash.
@@ -199,8 +242,11 @@ async fn fetch_eth_logs(address: &str, abi: &Abi) -> Result<(), Box<dyn std::err
     let mut logs_stream = provider.watch(&filter).await?;
 
     while let Some(log) = logs_stream.next().await {
-        if let Err(err) = process_log(log, &abi).await {
-            eprintln!("Error processing log: {}", err);
+        let decoded_data = process_log(log, &abi).await?;
+        if let Some(data) = decoded_data {
+            if let Err(e) = store_decoded_data(address, &data) {
+                eprintln!("Error storing decoded data: {}", e);
+            }
         }
     }
 
