@@ -3,12 +3,14 @@ use ethers::{
     providers::{Provider, Ws},
     prelude::*,
     abi::{Abi, EventExt, Detokenize},
+    utils::keccak256,
 };
 use eyre::Result;
 use dotenv::dotenv;
 use serde::{Serialize, Deserialize};
 use chrono::{Utc, NaiveDate, Datelike};
 use std::io::Write;
+use std::collections::HashMap;
 
 mod etherscan;
 mod test_sig_match;
@@ -55,15 +57,37 @@ async fn fetch_eth_logs(address: &str, abi: &Abi) -> Result<(), Box<dyn std::err
     // Get the logs specifically for the given address
     let mut logs_stream = provider.watch(&filter).await?;
 
-    while let Some(log) = logs_stream.next().await {
-        let decoded_data = process_log(log, &abi).await?;
-        if let Some(data) = decoded_data {
-            if let Err(e) = store_decoded_data(address, &data) {
-                eprintln!("Error storing decoded data: {}", e);
+    // Flag to track if the event_map has been created
+    let mut map_created = false;
+    // Create an empty HashMap to store the Keccak256 hash of event signatures as the key,
+    // and a tuple of event name and the event structure as the value.
+    let mut event_map = HashMap::new();
+
+    loop { // Changed to an infinite loop
+        if let Some(log) = logs_stream.next().await {
+            if !map_created {
+                // /!\ We use event.abi_signature() instead of event.signature() here.
+                // The reason is that `event.signature()` provides a human-readable format,
+                // while `event.abi_signature()` provides the human-readable ABI signature
+                // format suitable for hashing to match Ethereum's log signature standard.
+                // https://docs.rs/ethers/latest/ethers/abi/struct.Event.html
+                for (event_name, events) in &abi.events {
+                    for event in events {
+                        let event_signature_hash = keccak256(event.abi_signature().as_bytes());
+                        event_map.insert(event_signature_hash, (event_name.clone(), event.clone()));
+                    }
+                }
+                map_created = true;
+            }
+
+            let decoded_data = process_log(log, &event_map).await?;
+            if let Some(data) = decoded_data {
+                if let Err(e) = store_decoded_data(address, &data) {
+                    eprintln!("Error storing decoded data: {}", e);
+                }
             }
         }
     }
-
     Ok(())
 }
 

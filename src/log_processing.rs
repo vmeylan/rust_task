@@ -2,7 +2,7 @@ use ethers::{
     core::types::{Filter, Log, H160, U256},
     providers::{Provider, Ws},
     prelude::*,
-    abi::{Abi, RawLog, EventExt, Detokenize, Token, ethabi},
+    abi::{Abi, RawLog, EventExt, Detokenize, Token, ethabi, Event},
     utils::keccak256,
 };
 use ethers::types::Log as EthersLog;
@@ -104,7 +104,7 @@ pub fn parse_decoded_log(decoded: ethabi::Log, log: &EthersLog) -> Option<Decode
 /// # Returns
 ///
 /// A Result indicating the success or failure of the processing.
-pub async fn process_log(log: Log, abi: &Abi) -> Result<Option<DecodedData>, Box<dyn std::error::Error>> {
+pub async fn process_log(log: Log, event_map: &HashMap<[u8; 32], (String, Event)>) -> Result<Option<DecodedData>, Box<dyn std::error::Error>> {
     let raw_log = RawLog {
         topics: log.topics.clone(),
         data: (*log.data.clone()).to_vec(),
@@ -112,30 +112,10 @@ pub async fn process_log(log: Log, abi: &Abi) -> Result<Option<DecodedData>, Box
 
     let log_topic: H256 = log.topics[0];
 
-    // Create an empty HashMap to store the Keccak256 hash of event signatures as the key,
-    // and a tuple of event name and the event structure as the value.
-    let mut event_map = HashMap::new();
-
-    // Iterate over each event in the ABI.
-    for (event_name, events) in &abi.events {
-        for event in events {
-            // /!\ We use event.abi_signature() instead of event.signature() here.
-            // The reason is that `event.signature()` provides a human-readable format,
-            // while `event.abi_signature()` provides the human-readable ABI signature
-            // format suitable for hashing to match Ethereum's log signature standard.
-            // https://docs.rs/ethers/latest/ethers/abi/struct.Event.html
-            let event_signature_hash = keccak256(event.abi_signature().as_bytes());
-            if event_map.contains_key(&event_signature_hash) {
-                println!("Duplicate hash detected for event: {}", event_name);
-            }
-            event_map.insert(event_signature_hash, (event_name.clone(), event));
-        }
-    }
-
     let mut successfully_decoded = false;
 
     // Iterate over each event signature hash in our map.
-    for (hash, (event_name, event)) in &event_map {
+    for (hash, (event_name, event)) in event_map {
         // check if the event_name is equal to Swap
         if event_name != "Swap" {
             // println!("Skipping event: {}", event_name);
