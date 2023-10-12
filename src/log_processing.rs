@@ -120,7 +120,6 @@ pub async fn process_log(log: Log, event_map: &HashMap<[u8; 32], (String, Event)
     for (hash, (event_name, event)) in event_map {
         // check if the event_name is equal to Swap
         if event_name != "Swap" {
-            // println!("Skipping event: {}", event_name);
             continue;
         }
         // Check if the first topic of the log (which is the event signature) matches the current hash.
@@ -148,8 +147,7 @@ pub async fn process_log(log: Log, event_map: &HashMap<[u8; 32], (String, Event)
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ethers::core::types::{Log as EthersLog, H256};
-    use ethers::abi::{ethabi, Token};
+    use ethers::core::types::{H256};
     use std::str::FromStr;
 
     #[test]

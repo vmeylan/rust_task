@@ -11,7 +11,7 @@ fn keccak256(data: &[u8]) -> [u8; 32] {
 }
 
 pub fn test_hash() {
-    // guess: The following won't match because it is the event signature and not the ABI #
+    // guess: The following won't match because it is the event signature and not the ABI
     // event signature, re the map creation
     let signature = "Swap(address,address,uint256,uint256,uint256,uint256,uint256)";
     let computed_hash = keccak256(signature.as_bytes());

@@ -65,7 +65,7 @@ async fn fetch_eth_logs(address: &str, abi: &Abi) -> Result<(), Box<dyn std::err
     // and a tuple of event name and the event structure as the value.
     let mut event_map = HashMap::new();
 
-    loop { // Changed to an infinite loop
+    loop {
         if let Some(log) = logs_stream.next().await {
             // println!("Mock Log:\n{:?}", pretty_print_log(&log));  // used for unit test creation
             if !map_created {
@@ -135,24 +135,17 @@ mod tests {
 
     #[tokio::test]
     async fn test_websocket_connection() -> Result<(), Box<dyn std::error::Error>> {
-        // Replace with your Infura API key
         dotenv().ok();
         let api_key: String = std::env::var("INFURA_API_KEY").expect("INFURA_API_KEY not set");
-
-        // Construct the WebSocket URL
         let url = format!("wss://mainnet.infura.io/ws/v3/{}", api_key);
 
-        // Connect to the WebSocket provider
         let provider = Provider::<Ws>::connect(url.clone())
             .await
             .expect("Failed to connect to WebSocket provider");
 
-        // Specify the filter
-        // Parse the address
         let address_str = "0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640";
         let address = H160::from_str(address_str)?;
 
-        // Specify the filter with block range
         let filter = Filter {
             address: Some(ValueOrArray::Value(address)),
             ..Default::default()

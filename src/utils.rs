@@ -3,7 +3,7 @@ use ethers::{
 };
 use crate::log_processing::to_hex;
 use std::env;
-use std::path::{Path, PathBuf};
+use std::path::{PathBuf};
 
 pub fn root_dir() -> Option<String> {
     // Get the current directory
